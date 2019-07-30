@@ -2,6 +2,7 @@
 // emacs mode -*-JavaScript-*-
 
 const getopt = require('node-getopt');
+const colors = require('colors');
 
 // AWS info
 const tableName = 'JB1_Analytics_Events';
@@ -20,18 +21,37 @@ var opt = getopt.create([
 const ddb = new AWS.DynamoDB();
 
 // Do DynamoDB SCAN
-const params = {
+let nItems = 0;
+const reportItem = (item) => {
+  console.log ((nItems === 0 ? '[' : ',') + JSON.stringify(item));
+  ++nItems;
+};
+const lastItem = () => {
+  if (nItems > 0)
+    console.log (']');
+};
+
+let nScans = 0;
+let params = {
   TableName: tableName
 };
-console.warn ('SCAN', JSON.stringify (params));
+const doScan = (callback) => {
+  ++nScans;
+  console.warn (colors.green ('SCAN #' + nScans + ' (' + nItems + ' items)'),
+		JSON.stringify (params));
+  ddb.scan (params, (err, data) => {
+    if (err) {
+      console.warn ('Error', err);
+    } else {
+      data.Items.forEach (reportItem);
+      if (data.LastEvaluatedKey) {
+        params.ExclusiveStartKey = data.LastEvaluatedKey;
+        doScan (callback);
+      } else {
+        callback (err, data);
+      }
+    }
+  });
+};
 
-ddb.scan (params, function (err, data) {
-  if (err) {
-    console.log("Error", err);
-  } else {
-    //console.log("Success", data.Items);
-    data.Items.forEach(function(element, index, array) {
-      console.log (element);
-    });
-  }
-});
+doScan (lastItem);
